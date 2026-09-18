@@ -41,6 +41,8 @@
 
 开启自动标签后，系统在解析完成时从已有候选标签中选择匹配项。默认每篇最多关联 3 个，已有标签时跳过。配置只影响后续解析，不自动补齐历史文档，模型失败也不会阻塞文档完成。
 
+知识库可在「处理 → 文档脱敏」打开文本脱敏：解析得到 Markdown 后、切块前打码，再进入 Embedding 与摘要。默认关闭，已有知识库与已入库文档不变。开启后禁止云解析（weknoracloud / mineru_cloud / paddleocr_vl_cloud）。
+
 <Screenshot
   src="/screenshots/kb-batch-tag.png"
   caption="批量打标签：已选文档的共有标签会被预选中"
@@ -220,6 +222,36 @@ graph TB
 | custom_instructions | 空 | 追加到系统提示词的补充要求，如面向读者、需保留的术语 |
 
 无论是否开启自动刷新，知识库设置页都可以点击"生成 AI 描述"立即生成一次，并可一键把 gist 采纳为手写描述。`generated_profile.status` 为 `ready`/`empty`（无已解析文档，不调模型）/`failed`（保留上一次文案并记录错误）。关闭了文档摘要的上传只贡献标题、类型和标签，不贡献主题词。
+
+#### 文档脱敏
+
+`desensitization_config` 为知识库级 opt-in，默认关闭（`NULL` 或 `enabled: false` 时解析路径不改写）。开启后在本地解析得到 Markdown 后、切块前打码；OCR 和 caption 文本在保存前也会按同一配置处理。对象存储原件不改，且拒绝会把原图发送到远程 VLM 的配置。开启后禁止云解析引擎。脱敏失败时该文档 fail-closed，不会继续索引未打码内容。试跑接口 `POST /desensitization/preview` 只运行内置引擎，不调用 Presidio。检测并不完整，也不能替代人工检查。
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| enabled | false | 是否启用文本脱敏 |
+| engine | builtin | `builtin` 或 `presidio` |
+| mask_style | replace | `replace` 占位符，`partial` 局部遮罩 |
+| entity_types | 空 | 预置类型：`cn_id_card` / `cn_mobile` / `cn_landline` / `cn_bank_card` / `cn_uscc` / `cn_plate` / `email` |
+| rules | 空 | 自定义正则（Go RE2），在预置类型之后应用 |
+
+内置预置面向中国大陆常见格式，验证步骤用于减少误报：
+
+| 类型 | 检测与验证 |
+| --- | --- |
+| `cn_id_card` | 18 位身份证；校验 GB 11643 MOD 11-2、地区码和真实日期；不支持 15 位旧证。 |
+| `cn_mobile` | 大陆手机号，支持 `+86` / `0086` 及空格、短横分组；剥除分隔符后要求 11 位且号段有效。 |
+| `cn_landline` | `0` 开头的区号与号码格式，无校验位，误报风险相对较高。 |
+| `cn_bank_card` | 仅识别 `62` 开头的 16–19 位银联号，须通过 Luhn；排除同时为合法身份证的值。不识别 Visa/Mastercard。 |
+| `cn_uscc` | 18 位统一社会信用代码字符集，校验 GB 32100 校验位。 |
+| `cn_plate` | 普通及新能源民用车牌格式；不覆盖武警、使领馆等特殊号牌。 |
+| `email` | 邮箱基本格式及本地/域名长度、点号结构校验。 |
+
+身份证、手机号、固话和银行卡候选前后不能紧贴 ASCII 数字，避免从更长数字串中截取号码。自定义正则没有校验位或数字边界，最多 50 条、每条最多 500 个 Unicode 字符，使用 Go RE2；宽泛规则可能遮掉订单号等普通数据。自定义规则与预置命中区间重叠时，区间按起点从左到右处理，同一起点取较长命中，已接受区间会覆盖后续重叠命中；请避免自定义规则与预置类型重叠。非空自定义 replacement 始终优先于全局占位符或局部遮罩样式。
+
+Presidio 通过服务端环境变量 `PRESIDIO_ANALYZER_URL` 配置分析服务地址。选用 `presidio` 时，内置校验仍先执行，再调用 Presidio；服务未配置或调用失败会 fail-closed。试跑仍只覆盖内置引擎，不会将样例发送到 Presidio。
+
+一期预置不覆盖姓名、地址、护照、非银联卡、15 位旧身份证、语音的声学内容，也不能识别图片像素或保证 OCR 完整。已入库文档不会因打开开关而回溯处理；调整配置后需重新解析。原件下载权限仍由知识库访问控制决定，文本脱敏不会修改原始文件。
 
 ### 知识（Knowledge）管理 {#_3-知识-knowledge-管理}
 

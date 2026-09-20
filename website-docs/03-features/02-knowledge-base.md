@@ -225,7 +225,7 @@ graph TB
 
 #### 文档脱敏
 
-`desensitization_config` 为知识库级 opt-in，默认关闭（`NULL` 或 `enabled: false` 时解析路径不改写）。开启后在本地解析得到 Markdown 后、切块前打码；OCR/caption 在持久化前、库存标题和自定义元数据在进入模型前也按相同规则处理。对象存储原件不改；开启后禁止云解析，并拒绝会把原图发送到远程 VLM 的配置。脱敏失败时该文档 fail-closed，不会继续索引未打码内容。试跑接口 `POST /desensitization/preview` 只运行内置引擎，不调用 Presidio。检测并不完整，也不能替代人工检查。
+`desensitization_config` 为知识库级 opt-in，默认关闭（`NULL` 或 `enabled: false` 时解析路径不改写）。开启后在本地解析得到 Markdown 后、切块前打码；OCR/caption 在持久化前、库存标题和自定义元数据在进入模型前也按相同规则处理。Embedding、摘要、RAG 聊天 prompt、Agent 工具标题和知识库 Profile 采样只接触打码后文本。对象存储原件与库存标题不改；开启后禁止云解析和 remote VLM。`engine=llm` 与未知引擎名会被拒绝。脱敏失败时该文档 fail-closed，不会继续索引未打码内容。试跑接口 `POST /desensitization/preview` 只运行内置引擎，不调用 Presidio。检测并不完整，也不能替代人工检查。
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
